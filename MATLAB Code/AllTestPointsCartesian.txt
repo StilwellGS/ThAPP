@@ -1,0 +1,434 @@
+% Single Point Analysis
+% Calculates limting factors based on location and injury level
+% Author: George Stilwell
+% Date: 24/11/2021
+%Cartesian plotting of refined polar plot
+
+% Code plots all points
+clc, clear all, close all
+
+% LATEX FONT DEFAULTS - COPY ONCE PER FILE
+fontSize = 10; % latex font size = 11 but 10 looked better with 2:1 ratio
+W_ratio = 1; % figure height:width ratio (1:x)
+x00 = 10; % x position
+y00 = 10; % y position
+fig_width = 13.8; % latex textwidth approx 13.8cm
+fig_height = 13.8 / W_ratio; % / 1.5 = aspect ratio of 1.5:1
+posSize = [x00,y00,fig_width,fig_height];
+set(0,'DefaultTextInterpreter','latex') 
+set(0,'DefaultLegendInterpreter','latex')
+set(0,'defaultAxesFontSize',fontSize) 
+
+% ANGLE OF FORCE (Gamma) DEFINITION %
+%-----------------------------%
+GammaDEG = [0:0.25:359]; %[degrees] 
+%-----------------------------%
+GammaRAD = deg2rad(GammaDEG);
+GammaDEGFLIP = GammaDEG + 180; %This is flippint the direction for plotting
+GammaRADFLIP = deg2rad(GammaDEGFLIP);
+
+% CHOOSE BODY HEIGHT || MASS  || SEAT ANGLE || INJURY LEVEL %
+%-----------------------------%
+Mtot = 73; % Total mass [kg]
+Ltot = 1.741; % Total height [m] 
+T_seatdump = 10; % Seat dump from horizontal [degrees]
+Seatangle = 90; % have set as 90 following meeting
+xHPadj =-0.0078; %updated
+yHPadj =-0.1229;
+BRLength=0.48;
+HP = 187 ; % Hip position (cell) 173  [selected 187 to be slightly closer to shoulder position in testing]
+so =1;% injury level defined (1=AB, 2=C7, 3=C6, 4=C5)
+%-----------------------------%
+
+% -------------------------------------------------------------------------
+% % % AB AND 
+scalefactor = 0.00017;
+Scalelength = 200; %chosen in N
+% -------------------------------------------------------------------------
+%C7
+% scalefactor = 0.0002;
+% Scalelength = 200; %chosen in N
+% -------------------------------------------------------------------------
+% % C6
+% scalefactor = 0.00025;
+% Scalelength = 100; %chosen in N
+% % -------------------------------------------------------------------------
+% % % C5
+% scalefactor = 0.0007;
+% Scalelength = 100; %chosen in N
+% % % -------------------------------------------------------------------------
+ScaleBoi = Scalelength * scalefactor; %Put in scale factor
+spicey=1;
+
+% DEFINE GRAVITY & FRICTION %
+g = 9.81; % Gravity [m/s^2] 
+mu = 0.7; %Friction coeff https://www.engineeringtoolbox.com/friction-coefficients-d_778.html
+Limit = 650;% used to define x range
+
+% DEFINE ARM AND BODY LENGTHS % 15072021 UPDATE
+Lh = 0.117*Ltot; %0.1075*Ltot; % Head and Neck lenght [m]
+Lt =  0.305*Ltot;%0.3*Ltot; % Whole Trunk [m]
+Lu =  0.162*Ltot; %0.172*Ltot; % Upper arm length [m] https://exrx.net/Kinesiology/Segments %0.2979;  (From modelling paper in folder)
+Lf = 0.179*Ltot; %(0.157+0.5*0.0575)*Ltot; % Forearm length (+ 0.5*hand)[m]     % Might need to adjust this to be centre of grip 
+Lth = 0.243*Ltot;%0.232*Ltot; %these are the values from Plagenhoef
+Ll = 0.249*Ltot; %Leg
+
+% DEFINE ARM AND BODY MASS %
+Mh = 0.0694*Mtot; % Mass of Head and Neck [N] 
+Mt = 0.4346*Mtot; % Mass of Trunk [N] 
+Mu = 0.0271*Mtot; %Mass of Upper arm [N] all from https://exrx.net/Kinesiology/Segments
+Mf = (0.0061+0.0162)*Mtot; % Mass of Forearm and Hand [N] (assume this is for both arms)
+Mth = 0.1416*Mtot; % Mass of Thigh [N] 
+Ml = (0.0433+0.0137)*Mtot; % Mass of Leg/shin and foot [N] 
+
+% DEFINE SEGMENT COMS %
+Dh =  0.4898; % distance to COM up from clavicle
+Dt = 0.5515; % distance to COM up from hip
+Du = 0.5772; % distance to COM up from shoulder towards elbow
+Df = 0.4574; % distance to COM from elbow towards hand
+Dth = 0.4095; % distance to COM from hip towards knee
+Dl = 0.4459; % distance to COM from knee towards foot
+
+% DEFINE ANGLES OF BODY PARTS % %UPDATED 20092021
+T_backrest2VERT = Seatangle + T_seatdump -90; % Backrest angle from vertical [degrees] (assumes 90 degree seat angle)
+SigmaDEG = 180- Seatangle - T_seatdump; %Sigma as defined in FBD [degrees]
+
+%%%%%  STATIC EQUATIONS   %%%%
+FselfUPPER = (Mf+Mu+0.5*Mt+0.5*Mh)*g;
+Ftot = (Mf+Mu+0.5*Mh+0.5*Mt+Mth+Ml)*g; %this is the same as Mtot*g/2
+Farm = (Mf+Mu)*g; 
+
+% DEFINE LIMITING MOMENTS % 1 refers to able bodied subject
+%Define Limiting Torques - 1 refers to able bodied subject
+Factor1 = [1, 0.756, 0.505, 0.156];%factor of volume percentage for person with tetraplegia [=1 of able bodied person]
+Factor2 = [1, 1, 0.855, 0.403];
+Factor3 = [1, 0.5, 0, 0];
+Factor4 = [1, 1, 1, 0.5];
+Factor5 = [1, 0, 0, 0];
+Factor6 = [1, 0, 0, 0];
+%Define Peaks
+ElbowFlexPeak = 51;%[Nm]
+ElbowExtPeak = -57;%[Nm]
+ShoulderFlexPeak = 74;%[Nm]
+ShoulderExtPeak =  -71;%[Nm]
+TrunkExtLim = (178.1 * Factor5(so))/2; %isokinetic value [Nm] (divided by 2 for single arm 12112021)
+
+% POSSIBLE CELLS %
+%CellArray = [CellNumber,xl,yl]
+CellArray = [1 0 0; 2	0.1	0; 3	0.2	0; 4	0.3	0; 5	0.4	0; 6	0.5	0; 7	0.6	0; 8	0.7	0; 9	0.8	0; 10	0.9	0; 11	1	0; 12	1.1	0; 13	1.2	0; 14	1.3	0; 15	0	-0.1; 16	0.1	-0.1; 17	0.2	-0.1;
+18	0.3	-0.1; 19	0.4	-0.1; 20	0.5	-0.1; 21	0.6	-0.1; 22	0.7	-0.1; 23	0.8	-0.1; 24	0.9	-0.1; 25	1	-0.1; 26	1.1	-0.1; 27	1.2	-0.1; 28	1.3	-0.1; 29	0	-0.2; 30	0.1	-0.2; 31	0.2	-0.2; 32	0.3	-0.2; 33	0.4	-0.2;
+34	0.5	-0.2; 35	0.6	-0.2; 36	0.7	-0.2; 37	0.8	-0.2; 38	0.9	-0.2; 39	1	-0.2; 40	1.1	-0.2; 41	1.2	-0.2; 42	1.3	-0.2; 43	0	-0.3; 44	0.1	-0.3; 45	0.2	-0.3; 46	0.3	-0.3; 47	0.4	-0.3; 48	0.5	-0.3; 49	0.6	-0.3;
+50	0.7	-0.3; 51	0.8	-0.3; 52	0.9	-0.3; 53	1	-0.3; 54	1.1	-0.3; 55	1.2	-0.3; 56	1.3	-0.3; 57	0	-0.4; 58	0.1	-0.4; 59	0.2	-0.4; 60	0.3	-0.4; 61	0.4	-0.4; 62	0.5	-0.4; 63	0.6	-0.4; 64	0.7	-0.4; 65	0.8	-0.4;
+66	0.9	-0.4; 67	1	-0.4; 68	1.1	-0.4; 69	1.2	-0.4; 70	1.3	-0.4; 71	0	-0.5; 72	0.1	-0.5; 73	0.2	-0.5; 74	0.3	-0.5; 75	0.4	-0.5; 76	0.5	-0.5; 77	0.6	-0.5; 78	0.7	-0.5; 79	0.8	-0.5; 80	0.9	-0.5; 81	1	-0.5;
+82	1.1	-0.5; 83	1.2	-0.5; 84	1.3	-0.5; 85	0	-0.6; 86	0.1	-0.6; 87	0.2	-0.6; 88	0.3	-0.6; 89	0.4	-0.6; 90	0.5	-0.6; 91	0.6	-0.6; 92	0.7	-0.6; 93	0.8	-0.6; 94	0.9	-0.6; 95	1	-0.6; 96	1.1	-0.6; 97	1.2	-0.6;
+98	1.3	-0.6; 99	0	-0.7; 100	0.1	-0.7; 101	0.2	-0.7; 102	0.3	-0.7; 103	0.4	-0.7; 104	0.5	-0.7; 105	0.6	-0.7; 106	0.7	-0.7; 107	0.8	-0.7; 108	0.9	-0.7; 109	1	-0.7; 110	1.1	-0.7; 111	1.2	-0.7; 112	1.3	-0.7; 113	0	-0.8;
+114	0.1	-0.8; 115	0.2	-0.8; 116	0.3	-0.8; 117	0.4	-0.8; 118	0.5	-0.8; 119	0.6	-0.8; 120	0.7	-0.8; 121	0.8	-0.8; 122	0.9	-0.8; 123	1	-0.8; 124	1.1	-0.8; 125	1.2	-0.8; 126	1.3	-0.8; 127	0	-0.9; 128	0.1	-0.9; 129	0.2	-0.9;
+130	0.3	-0.9; 131	0.4	-0.9; 132	0.5	-0.9; 133	0.6	-0.9; 134	0.7	-0.9; 135	0.8	-0.9; 136	0.9	-0.9; 137	1	-0.9; 138	1.1	-0.9; 139	1.2	-0.9; 140	1.3	-0.9; 141	0	-1; 142	0.1	-1; 143	0.2	-1; 144	0.3	-1; 145	0.4	-1;
+146	0.5	-1; 147	0.6	-1; 148	0.7	-1; 149	0.8	-1; 150	0.9	-1; 151	1	-1; 152	1.1	-1; 153	1.2	-1; 154	1.3	-1; 155	0	-1.1; 156	0.1	-1.1; 157	0.2	-1.1; 158	0.3	-1.1; 159	0.4	-1.1; 160	0.5	-1.1; 161	0.6	-1.1;
+162	0.7	-1.1; 163	0.8	-1.1; 164	0.9	-1.1; 165	1	-1.1; 166	1.1	-1.1; 167	1.2	-1.1; 168	1.3	-1.1; 169	0	-1.2; 170	0.1	-1.2; 171	0.2	-1.2; 172	0.3	-1.2; 173	0.4	-1.2; 174	0.5	-1.2; 175	0.6	-1.2; 176	0.7	-1.2; 177	0.8	-1.2;
+178	0.9	-1.2; 179	1	-1.2; 180	1.1	-1.2; 181	1.2	-1.2; 182	1.3	-1.2; 183	0	-1.3; 184	0.1	-1.3; 185	0.2	-1.3; 186	0.3	-1.3; 187	0.4	-1.3; 188	0.5	-1.3; 189	0.6	-1.3; 190	0.7	-1.3; 191	0.8	-1.3; 192	0.9	-1.3; 193	1	-1.3;
+194	1.1	-1.3; 195	1.2	-1.3; 196	1.3	-1.3; 197	0	-1.4; 198	0.1	-1.4; 199	0.2	-1.4; 200	0.3	-1.4; 201	0.4	-1.4; 202	0.5	-1.4; 203	0.6	-1.4; 204	0.7	-1.4; 205	0.8	-1.4; 206	0.9	-1.4; 207	1	-1.4; 208	1.1	-1.4; 209	1.2	-1.4;
+210	1.3	-1.4; 211	0	-1.5; 212	0.1	-1.5; 213	0.2	-1.5; 214	0.3	-1.5; 215	0.4	-1.5; 216	0.5	-1.5; 217	0.6	-1.5; 218	0.7	-1.5; 219	0.8	-1.5; 220	0.9	-1.5; 221	1	-1.5; 222	1.1	-1.5; 223	1.2	-1.5; 224	1.3	-1.5];
+
+
+% DETERMINE SHOULDER POSITION + DEFINE HIP + KNEE %
+xHP = CellArray(HP,2) + xHPadj;  %Defined as per FBD [m] (point to test)
+yHP = CellArray(HP,3) + yHPadj;  %[m]
+xBR = 0.39+ xHPadj; %starting point slightly below hip
+yBR = -1.35+ yHPadj;
+xSP = xHP - Lt*cosd(SigmaDEG);  % Shoulder x Position in grid (cell) 129 is x=0.2,y0=-0.9 (assuming trunk is approx length of hip to shoulder) 
+ySP = yHP + Lt*sind(SigmaDEG); % Shoulder y Position in grid
+xK = xHP+cosd(T_seatdump)*Lth; %knee coord for plotting
+yK = yHP+sind(T_seatdump)*Lth;% KNEE LOCATION %
+
+
+
+% POINT OF INTEREST (CELL) %
+%-----------------------------%
+% prompt = 'Which cell would you like to test? (1-224)';
+
+count = 1;
+
+% BACKREST LOCATION
+xBackrest = (xBR-sind(T_backrest2VERT)*BRLength); %approximate backrest location for equilibrium around backrest
+yBackrest = (yBR+cosd(T_backrest2VERT)*BRLength);
+
+%Initalise
+Fhiptip = zeros(224,length(GammaDEG));
+Fbacktip = zeros(224,length(GammaDEG));
+Ffriction = zeros(224,length(GammaDEG));
+FselfweightSTATIC = zeros(224,length(GammaDEG));
+CHECKpossible = NaN(224,length(GammaDEG));
+% FElbExt = zeros(224,length(GammaDEG));
+% FElbFlex = zeros(224,length(GammaDEG));
+% FShouExt = zeros(224,length(GammaDEG));
+% FShouFlex = zeros(224,length(GammaDEG));
+% FTrunkExt = zeros(224,length(GammaDEG));
+
+FShoulderCOMe = zeros(224,length(GammaDEG));
+FShoulderCOMf = zeros(224,length(GammaDEG));
+FElbowCOMe= zeros(224,length(GammaDEG));
+FElbowCOMf= zeros(224,length(GammaDEG));
+
+% CREATE PLOT TO VISUALLY CHECK %
+figure
+hold on
+pbaspect([1 1 1])
+%title(['Attempt at Combined plot for FLIPPED direction'])
+
+%plot(scaledxcoordFitler,scaledycoordFitler,'color','r','HandleVisibility','off');
+
+% ARM SET TO SINGLE LOCATION %
+plot([xSP,0.1091],[ySP,-1.1450],'color','b','linewidth',2) %Upper arm [Have set in one location]
+plot([(0.4),0.1091],[(-1),-1.1450],'color','b','linewidth',2) %forearm
+% BACKREST + SEAT
+plot([(xBR-sind(T_backrest2VERT)*BRLength),xBR],[(yBR+cosd(T_backrest2VERT)*BRLength),yBR],'color','k','linewidth',2.5)%Backrest (Can be adjusted again still kind of approximate)
+plot([xBR,(xBR+cosd(T_seatdump)*0.4)],[yBR,(yBR+sind(T_seatdump)*0.4)],'color','k','linewidth',2.5)%Seat %seat kept a constant length
+
+
+% BACK HIP LEG AND OTHER %
+h1 = plot([xSP,xHP],[ySP,yHP],'color','b','linewidth',2) %back
+plot([xHP,xK],[yHP,yK],'color','b','linewidth',2)%Thigh %23/0621 hip position updated to match the code
+plot([xK,xK],[yK,yK-0.247*Ltot],'color','b','linewidth',2)%leg
+
+% PLOT HEAD
+th1 = 0:pi/50:2*pi;
+xunit2 = 0.1 * cos(th1) + xSP; %head moves to be in line with shoulder and 0.11 m above in x pos
+yunit2 = 0.1 * sin(th1) + (ySP+ 0.11);
+plot(xunit2, yunit2,'color','b','linewidth',2);
+
+% PLOT WHEELCHAIR WHEEL
+th1 = 0:pi/50:2*pi;
+xunit1 = 0.29 * cos(th1) + 0.35; % 230621 Wheel size increase to match "most common rear wheel size"
+yunit1 = 0.29 * sin(th1) - 1.48;
+h2 = plot(xunit1, yunit1,'color','k','linewidth',2.5);
+
+xlim([-0.1 1.6])%set axis limits CHANGED TO BE SQUARE ON 15/4/2019
+ylim([-1.6 0.1])
+
+xlabel('Anterior/Posterior (m)') %labels
+ylabel('Superior/Inferior (m)')
+grid on
+
+% Create array for dots in plot
+xdots = [0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000;0;0.100000000000000;0.200000000000000;0.300000000000000;0.400000000000000;0.500000000000000;0.600000000000000;0.700000000000000;0.800000000000000;0.900000000000000;1;1.10000000000000;1.20000000000000;1.30000000000000];
+ydots = [0;0;0;0;0;0;0;0;0;0;0;0;0;0;-0.100000000000000;-0.100000000000000;-0.100000000000000;-0.100000000000000;-0.100000000000000;-0.100000000000000;-0.100000000000000;-0.100000000000000;-0.100000000000000;-0.100000000000000;-0.100000000000000;-0.100000000000000;-0.100000000000000;-0.100000000000000;-0.200000000000000;-0.200000000000000;-0.200000000000000;-0.200000000000000;-0.200000000000000;-0.200000000000000;-0.200000000000000;-0.200000000000000;-0.200000000000000;-0.200000000000000;-0.200000000000000;-0.200000000000000;-0.200000000000000;-0.200000000000000;-0.300000000000000;-0.300000000000000;-0.300000000000000;-0.300000000000000;-0.300000000000000;-0.300000000000000;-0.300000000000000;-0.300000000000000;-0.300000000000000;-0.300000000000000;-0.300000000000000;-0.300000000000000;-0.300000000000000;-0.300000000000000;-0.400000000000000;-0.400000000000000;-0.400000000000000;-0.400000000000000;-0.400000000000000;-0.400000000000000;-0.400000000000000;-0.400000000000000;-0.400000000000000;-0.400000000000000;-0.400000000000000;-0.400000000000000;-0.400000000000000;-0.400000000000000;-0.500000000000000;-0.500000000000000;-0.500000000000000;-0.500000000000000;-0.500000000000000;-0.500000000000000;-0.500000000000000;-0.500000000000000;-0.500000000000000;-0.500000000000000;-0.500000000000000;-0.500000000000000;-0.500000000000000;-0.500000000000000;-0.600000000000000;-0.600000000000000;-0.600000000000000;-0.600000000000000;-0.600000000000000;-0.600000000000000;-0.600000000000000;-0.600000000000000;-0.600000000000000;-0.600000000000000;-0.600000000000000;-0.600000000000000;-0.600000000000000;-0.600000000000000;-0.700000000000000;-0.700000000000000;-0.700000000000000;-0.700000000000000;-0.700000000000000;-0.700000000000000;-0.700000000000000;-0.700000000000000;-0.700000000000000;-0.700000000000000;-0.700000000000000;-0.700000000000000;-0.700000000000000;-0.700000000000000;-0.800000000000000;-0.800000000000000;-0.800000000000000;-0.800000000000000;-0.800000000000000;-0.800000000000000;-0.800000000000000;-0.800000000000000;-0.800000000000000;-0.800000000000000;-0.800000000000000;-0.800000000000000;-0.800000000000000;-0.800000000000000;-0.900000000000000;-0.900000000000000;-0.900000000000000;-0.900000000000000;-0.900000000000000;-0.900000000000000;-0.900000000000000;-0.900000000000000;-0.900000000000000;-0.900000000000000;-0.900000000000000;-0.900000000000000;-0.900000000000000;-0.900000000000000;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1.10000000000000;-1.10000000000000;-1.10000000000000;-1.10000000000000;-1.10000000000000;-1.10000000000000;-1.10000000000000;-1.10000000000000;-1.10000000000000;-1.10000000000000;-1.10000000000000;-1.10000000000000;-1.10000000000000;-1.10000000000000;-1.20000000000000;-1.20000000000000;-1.20000000000000;-1.20000000000000;-1.20000000000000;-1.20000000000000;-1.20000000000000;-1.20000000000000;-1.20000000000000;-1.20000000000000;-1.20000000000000;-1.20000000000000;-1.20000000000000;-1.20000000000000;-1.30000000000000;-1.30000000000000;-1.30000000000000;-1.30000000000000;-1.30000000000000;-1.30000000000000;-1.30000000000000;-1.30000000000000;-1.30000000000000;-1.30000000000000;-1.30000000000000;-1.30000000000000;-1.30000000000000;-1.30000000000000;-1.40000000000000;-1.40000000000000;-1.40000000000000;-1.40000000000000;-1.40000000000000;-1.40000000000000;-1.40000000000000;-1.40000000000000;-1.40000000000000;-1.40000000000000;-1.40000000000000;-1.40000000000000;-1.40000000000000;-1.40000000000000;-1.50000000000000;-1.50000000000000;-1.50000000000000;-1.50000000000000;-1.50000000000000;-1.50000000000000;-1.50000000000000;-1.50000000000000;-1.50000000000000;-1.50000000000000;-1.50000000000000;-1.50000000000000;-1.50000000000000;-1.50000000000000];
+plot(xdots,ydots,'-o','LineStyle','none','color','black','MarkerSize',4,'HandleVisibility','off')
+set(gca,'box','on'); % put box around the plot (looks tidier/more complete)
+
+%PLOT SCALE
+th = 0:pi/50:2*pi;
+xunit = ScaleBoi * cos(th) + 0.5;
+yunit = ScaleBoi * sin(th) - 0.1;%was 0.1 before
+h3 = plot(xunit, yunit);
+
+
+for celltotest = 1:224
+    % celltotest = input(prompt);
+    % Define point
+    x1 = CellArray(celltotest,2);  %Defined as per FBD [m] (point to test)
+    y1 = CellArray(celltotest,3);  %[m]
+    %-----------------------------%
+
+    this = 1; %'this' will be used for storing force/direction data
+
+    %Check point is reachable(circles intersect)
+    CHECK = 0;
+    CHECK2 = 0; %used to test Lamda is acceptabe
+    
+   
+    % CHECK TESTPOINT IS REACHABLE % 
+    D = sqrt((x1-xSP)^2+(y1-ySP)^2); %Determine circle centre distance
+    %Calculate Intersection Points
+    dd = 0.25*sqrt((D+Lu+Lf) * (D+Lu-Lf) * (D-Lu+Lf) * (-D+Lu+Lf));
+
+    %Check circles intersect
+    if Lu+Lf > D && D > abs(Lu-Lf) 
+        %disp ('Point is reachable')
+        CHECK = 1;
+    else
+        %disp ('Point is not reachable')
+        CHECK = 0;
+    end
+
+    % DETERMINE/CALC JOINT ANGLES %
+    x = x1 - xSP; %used for joint angles and plotting
+    y = y1 - ySP;
+    [Beta1Soln, Beta2Soln] = twodofIK(x,y,Lu,Lf); % x and y are the distance between the point of interest and the shoulder 
+
+    % CHANGE ANGLE TO DEGREES %Beta2DEG
+    Beta1DEG = rad2deg(Beta1Soln(1)); %shoulder angle in degrees from horizontal with +ve up
+    AlphaDEG = rad2deg(Beta2Soln(1)); %forearm angle (difference between Lu and Lf)
+    LamdaDEG = SigmaDEG + Beta1DEG;
+    Beta2DEG = Beta1DEG + AlphaDEG;
+
+    % ELBOW LOCATION %
+    xElbow = xSP + cosd(Beta1DEG)*Lu;
+    yElbow = ySP + sind(Beta1DEG)*Lu;
+
+    % CHECK SOLUTION MATCHES ARM LENGTHS
+    Distance1 = sqrt((xElbow-xSP)^2+(yElbow-ySP)^2);
+    if Lu - Distance1 < 1e-10
+        %disp (['Lu Matches'])
+    else
+        %disp (['We have an issue on length 1 (Lu) solution'])
+    end
+
+    Distance2 = sqrt((xElbow-x1)^2+(yElbow-y1)^2);
+    if Lf - Distance2 < 1e-10
+        %disp (['Lf Matches'])
+    else
+        %disp (['We have an issue on length 2 (Lf) solution'])
+    end
+
+    % CHECK ANGLES ARE ACCEPTABLE %
+    if LamdaDEG > -62.3 && 166.7 >  LamdaDEG % as defined in thesis [Boone and Azen]
+        %disp ('LamdaDEG is acceptable')
+        CHECK2 = 1;
+    else
+        %disp ('LamdaDEG is NOT acceptable')
+        %return
+        CHECK2 = 0;
+    end
+    if AlphaDEG > 0 && 142.9 >  AlphaDEG % as defined in thesis 
+        %disp ('Alpha1DEG is acceptable')
+    else
+        %disp ('Alpha1DEG is NOT acceptable')
+        %return
+        CHECK2 = 0;
+    end
+
+    %%% DETERMINE TOTAL CENTRE OF MASS (COM) %%%
+    % to add to plot, each of the COM locations - could plot a large red dot
+    xCOMf = ((xElbow+(Lf*Df)*cosd(Beta2DEG))); % x location of forearm COM
+    yCOMf = ((yElbow+(Lf*Df)*sind(Beta2DEG))); % y location of forearm COM
+    xCOMu =  xSP+(Lu*Du)*cosd(Beta1DEG); % x location of upperearm COM
+    yCOMu =  ySP+(Lu*Du)*sind(Beta1DEG); % y location of upperarm COM
+    xCOMt =  xHP -(Lt*Dt)*cosd(SigmaDEG); % x location of trunk COM
+    yCOMt =  yHP +(Lt*Dt)*sind(SigmaDEG); % y location of trunk COM
+    xCOMh =  xSP; % x location of head COM
+    yCOMh =  ySP + (Dh*Lh); % y location of head COM
+    xCOMthigh = ((xHP+(Lth*Dth)*cosd(T_seatdump)));
+    yCOMthigh = ((yHP+(Lth*Dth)*sind(T_seatdump)));
+    xCOMshin = xK;
+    yCOMshin = yK-(Ll*Dl);
+    %TOTALs (All done to setup equations for a single hand)
+    xtotalUPPERCOM = ((Mf*(xCOMf)) + (Mu*(xCOMu)) + (0.5*Mt*(xCOMt)) + (0.5*Mh*(xCOMh))) / (Mf+Mu+0.5*Mt+0.5*Mh);% Total x COM
+    ytotalUPPERCOM = ((Mf*(yCOMf)) + (Mu*(yCOMu)) + (0.5*Mt*(yCOMt)) + (0.5*Mh*(yCOMh))) / (Mf+Mu+0.5*Mt+0.5*Mh);% Total y COM
+    xtotalFULLCOM = ((Mf*(xCOMf)) + (Mu*(xCOMu)) + (0.5*Mt*(xCOMt)) + (0.5*Mh*(xCOMh)) + (2*Mth*(xCOMthigh)) + (2*Ml*(xCOMshin))) / (Mf+Mu+0.5*Mt+0.5*Mh+Mth+Ml);% Total x COM
+    ytotalFULLCOM = ((Mf*(yCOMf)) + (Mu*(yCOMu)) + (0.5*Mt*(yCOMt)) + (0.5*Mh*(yCOMh)) + (2*Mth*(yCOMthigh)) + (2*Ml*(yCOMshin))) / (Mf+Mu+0.5*Mt+0.5*Mh+Mth+Ml);% Total y COM
+
+    xArmCOM = ((Mf*(xCOMf)) + (Mu*(xCOMu))) / (Mf+Mu);
+    yArmCOM = ((Mf*(yCOMf)) + (Mu*(yCOMu))) / (Mf+Mu);
+
+
+    %Define equations
+    ElbowFlexLimCalc = -0.0000997631*(AlphaDEG)^3 + 0.0022541003*(AlphaDEG)^2 + 1.0117515019*(AlphaDEG) + 50.2801120448; %Elbow Flexion 
+    ElbowExtLimCalc = 0.0001247038*(AlphaDEG)^3 - 0.0386656878*(AlphaDEG)^2 + 3.6581774301*(AlphaDEG) - 9.2731829574; %Elbow Extension
+    ShoulderFlexLimCalc = -0.0003285003*(LamdaDEG)^2 - 0.3587178587*(LamdaDEG) + 86.0784485784; %Shoulder Flexion
+    ShoulderExtLimCalc = -0.0000248057*(LamdaDEG)^3 - 0.0010130714*(LamdaDEG)^2 + 0.7263628390*(LamdaDEG) + 60.6928282985; %Shoulder Extension
+
+    if AlphaDEG < 15 
+        ElbowFlexLim = 0.65 * ElbowFlexPeak * Factor4(so); %[Nm] Define standard value outside equation
+        ElbowExtLim = 0.37 * ElbowExtPeak * Factor3(so); %[Nm]   
+    elseif AlphaDEG > 120
+        ElbowFlexLim = 0.33 * ElbowFlexPeak * Factor4(so); %[Nm]
+        ElbowExtLim = 0.88 * ElbowExtPeak * Factor3(so); %[Nm]
+    else
+        ElbowFlexLim = ElbowFlexLimCalc/100 * ElbowFlexPeak * Factor4(so); %[Nm]
+        ElbowExtLim = ElbowExtLimCalc/100 * ElbowExtPeak * Factor3(so); %[Nm]
+    end
+
+    if (LamdaDEG) < -45 
+        ShoulderFlexLim = 0.95 * ShoulderFlexPeak * Factor2(so); %[Nm]
+        ShoulderExtLim = 0.28 * ShoulderExtPeak * Factor1(so); %[Nm] %e
+    elseif (LamdaDEG) > 120
+        ShoulderFlexLim = 0.38 * ShoulderFlexPeak * Factor2(so); %[Nm]
+        ShoulderExtLim = 0.9 * ShoulderExtPeak * Factor1(so); %[Nm] %e
+    else
+        ShoulderFlexLim = ShoulderFlexLimCalc/100 * ShoulderFlexPeak * Factor2(so); %[Nm]
+        ShoulderExtLim = ShoulderExtLimCalc/100 * ShoulderExtPeak * Factor1(so); %[Nm] %equation added on the 260821
+    end
+
+
+        if CHECK == 1 && CHECK2 == 1
+        x11(spicey)=x1; %not the best way but it does work (just has a large number of double ups
+        y11(spicey)=y1;
+        spicey=spicey+1;
+           
+    
+            % HIP AND BACKREST LIMITS %
+            for jj = 1:length(GammaDEG)
+                % Static equilibrium equations
+                Fhiptip(celltotest,jj) = (FselfUPPER*(xHP-xtotalUPPERCOM)+TrunkExtLim) / (cosd(GammaDEG(1,jj))*(y1-yHP) - sind(GammaDEG(1,jj))*(x1-xHP)); %Tip at hip point %Y lengths sign corrected 080721 %change to +M0 13082021
+                Fbacktip(celltotest,jj) = ((xtotalFULLCOM-xBackrest)*Ftot)/(sind(GammaDEG(1,jj))*(x1-xBackrest) - cosd(GammaDEG(1,jj))*(y1-yBackrest)); %tip at backrest %Y lengths sign corrected 080721
+                Ffriction(celltotest,jj) = (Ftot*((mu*cosd(T_seatdump))+(sind(T_seatdump)))) / (mu*sind(GammaDEG(1,jj)-T_seatdump) + cosd(GammaDEG(1,jj)-T_seatdump));
+                FselfweightSTATIC(celltotest,jj)=((Mtot*g)/2)/sind(GammaDEG(1,jj));
+
+
+                % COM Method
+                FShoulderCOMe(celltotest,jj) = (ShoulderExtLim - Farm*(xArmCOM-xSP)) / (-sind(GammaDEG(1,jj))*(x1-xSP) + cosd(GammaDEG(1,jj))*(y1-ySP));
+                FShoulderCOMf(celltotest,jj) = (ShoulderFlexLim - Farm*(xArmCOM-xSP)) / (-sind(GammaDEG(1,jj))*(x1-xSP) + cosd(GammaDEG(1,jj))*(y1-ySP));
+                FElbowCOMe(celltotest,jj) =   (ElbowExtLim - (Df*Lf)*Mf*g*cosd(Beta2DEG)) / (Lf*cosd(GammaDEG(1,jj))*sind(Beta2DEG) - Lf*sind(GammaDEG(1,jj))*cosd(Beta2DEG));
+                FElbowCOMf(celltotest,jj) = (ElbowFlexLim - (Df*Lf)*Mf*g*cosd(Beta2DEG)) / (Lf*cosd(GammaDEG(1,jj))*sind(Beta2DEG) - Lf*sind(GammaDEG(1,jj))*cosd(Beta2DEG));
+
+                %Joint torque
+                %Elbow
+%                 FElbExt(1,jj) =   (ElbowExtLim - (Df*Lf)*Mf*g*cosd(Beta2DEG)) / (Lf*cosd(GammaDEG(1,jj))*sind(Beta2DEG) - Lf*sind(GammaDEG(1,jj))*cosd(Beta2DEG));
+%                 FElbFlex(1,jj) = (ElbowFlexLim - (Df*Lf)*Mf*g*cosd(Beta2DEG)) / (Lf*cosd(GammaDEG(1,jj))*sind(Beta2DEG) - Lf*sind(GammaDEG(1,jj))*cosd(Beta2DEG));
+%                 %Shoulder
+%                 FShouExt(1,jj) = (ShoulderExtLim - cosd(Beta2DEG)*Mf*g*(Lf*Df) - cosd(Beta1DEG)*cosd(Beta1DEG)*(Lu*Mf*g + Mu*g*(Lu*Du))) / ((cosd(GammaDEG(1,jj)))*Lf*sind(Beta2DEG)+ cosd(Beta2DEG)*(-1*sind(GammaDEG(1,jj)))*Lf - sind(Beta1DEG)*(-1*cosd(GammaDEG(1,jj)))*Lu + cosd(Beta1DEG)*-1*Lu*sind(GammaDEG(1,jj))); 
+%                 FShouFlex(1,jj) = (ShoulderFlexLim - cosd(Beta2DEG)*Mf*g*(Lf*Df) - cosd(Beta1DEG)*cosd(Beta1DEG)*(Lu*Mf*g + Mu*g*(Lu*Du))) / ((cosd(GammaDEG(1,jj)))*Lf*sind(Beta2DEG)+ cosd(Beta2DEG)*(-1*sind(GammaDEG(1,jj)))*Lf - sind(Beta1DEG)*(-1*cosd(GammaDEG(1,jj)))*Lu + cosd(Beta1DEG)*-1*Lu*sind(GammaDEG(1,jj))); 
+%                 %Trunk
+%                 FTrunkExt(1,jj) = (TrunkExtLim - cosd(Beta2DEG)*Mf*g*(Lf*Df) - cosd(Beta1DEG)*cosd(Beta1DEG)*(Lu*Mf*g + Mu*g*(Lu*Du)) + cosd(SigmaDEG)*(Lt*(0.5*Mh*g+(Mf*g + Mu*g)) + (Lt*Dt)*(0.5*Mt)*g)) / ((cosd(GammaDEG(1,jj)))*Lf*sind(Beta2DEG)+ cosd(Beta2DEG)*(-1*sind(GammaDEG(1,jj)))*Lf - sind(Beta1DEG)*(-1*cosd(GammaDEG(1,jj)))*Lu + cosd(Beta1DEG)*-1*Lu*sind(GammaDEG(1,jj))  - (-1*cosd(GammaDEG(1,jj)))*Lt*sind(SigmaDEG) - cosd(SigmaDEG)*(Lt*((-1*sind(GammaDEG(1,jj)))))); 
+
+            end
+            
+        end
+
+        
+        
+    Solutions = [(Fhiptip(celltotest,:))' (Fbacktip(celltotest,:))' (Ffriction(celltotest,:))' (FElbowCOMe(celltotest,:))' (FElbowCOMf(celltotest,:))' (FShoulderCOMe(celltotest,:))' (FShoulderCOMf(celltotest,:))' CHECKpossible(celltotest,:)' (FselfweightSTATIC(celltotest,:))'];%(FTrunkExt)'
+
+    for plz = 1:1:length(GammaDEG)
+        if Solutions(plz,4)>0 && Solutions(plz,5)>0%compare elbow extensiona nd flexion limits are different
+            Solutions(plz,8) = 0;
+        elseif Solutions(plz,4)<0 && Solutions(plz,5)<0%compare elbow extensiona nd flexion limits are different
+            Solutions(plz,8) = 0;
+        end
+    end
+    
+    
+    for plz = 1:1:length(GammaDEG)
+        if Solutions(plz,4)>0 && Solutions(plz,5)>0%compare elbow extensiona nd flexion limits are different
+            Solutions(plz,8) = 0;
+        elseif Solutions(plz,4)<0 && Solutions(plz,5)<0%compare elbow extensiona nd flexion limits are different
+            Solutions(plz,8) = 0;
+        elseif Solutions(plz,6)<0 && Solutions(plz,7)<0%compare elbow extensiona nd flexion limits are different
+            Solutions(plz,8) = 0;
+        elseif Solutions(plz,6)>0 && Solutions(plz,7)>0%compare elbow extensiona nd flexion limits are different
+            Solutions(plz,8) = 0;        
+        end
+    end
+    
+    B = Solutions';
+    B(B<0) = NaN;
+    Surely = min(B); 
+    SurelyPlot = Surely';
+    [xPLOTFLIP,yPLOTFLIP] = pol2cart(GammaRADFLIP',SurelyPlot); %Change into Cartesian for plotting  
+
+    % Scale Values and shift to point of interest    
+    scaledxcoord = scalefactor .* xPLOTFLIP + x1; %scale points for plot
+    scaledycoord = scalefactor .* yPLOTFLIP + y1;
+    
+    h4=plot(scaledxcoord,scaledycoord,'color','r','HandleVisibility','off')
+    Surely = []
+            % PLOT POINTs BEING TESTED
+        %plot(x1,y1,'k.','linewidth',2.5)%plots the black dot for each one that has been tested
+end
+plot(x11,y11,'k.','linewidth',2.5)%plots the black dot for each one that has been tested
+legend([h1,h2,h3,h4],'Test Subject','Wheelchair','200N Scale','Filtered polar plot')
+% % % % %  % -------------------------------------------------------------------------
+print(gcf,'20211125_AB_FILTERED_SINGLEARM_TorqueAndStatics_Cartesian_AllPoints2','-dbitmap','-r300');   
+print('20211125_AB_FILTERED_SINGLEARM_TorqueAndStatics_Cartesian_AllPoints2', '-depsc'); % save as .eps
+% % % % % % -------------------------------------------------------------------------
